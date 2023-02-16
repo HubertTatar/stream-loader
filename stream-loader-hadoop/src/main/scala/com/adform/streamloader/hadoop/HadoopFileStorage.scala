@@ -10,7 +10,7 @@ package com.adform.streamloader.hadoop
 
 import java.io.IOException
 import com.adform.streamloader.model.StreamRange
-import com.adform.streamloader.sink.batch.storage.TwoPhaseCommitBatchStorage
+import com.adform.streamloader.sink.batch.storage.{OffsetCompression, TwoPhaseCommitBatchStorage}
 import com.adform.streamloader.sink.file.{FilePathFormatter, FileRecordBatch, PartitionedFileRecordBatch}
 import org.apache.hadoop.fs.{FileSystem, Path}
 
@@ -25,8 +25,11 @@ class HadoopFileStorage[P](
     stagingDirectory: String,
     stagingFilePathFormatter: FilePathFormatter[P],
     destinationDirectory: String,
-    destinationFilePathFormatter: FilePathFormatter[P]
-) extends TwoPhaseCommitBatchStorage[PartitionedFileRecordBatch[P, FileRecordBatch], MultiFileStaging] {
+    destinationFilePathFormatter: FilePathFormatter[P],
+    offsetCompression: OffsetCompression
+) extends TwoPhaseCommitBatchStorage[PartitionedFileRecordBatch[P, FileRecordBatch], MultiFileStaging](
+      offsetCompression
+    ) {
 
   private val stagingPath = new Path(stagingDirectory)
   private val basePath = new Path(destinationDirectory)
@@ -93,7 +96,8 @@ object HadoopFileStorage {
       private val _stagingBasePath: String,
       private val _stagingFilePathFormatter: FilePathFormatter[P],
       private val _destinationBasePath: String,
-      private val _destinationFilePathFormatter: FilePathFormatter[P]
+      private val _destinationFilePathFormatter: FilePathFormatter[P],
+      private val _offsetCompression: OffsetCompression
   ) {
 
     /**
@@ -117,6 +121,12 @@ object HadoopFileStorage {
       */
     def stagingFilePathFormatter(formatter: FilePathFormatter[P]): Builder[P] =
       copy(_stagingFilePathFormatter = formatter)
+
+    /**
+      * Sets the offset compression strategy
+      */
+    def offsetCompression(offsetCompression: OffsetCompression): Builder[P] =
+      copy(_offsetCompression = offsetCompression)
 
     /**
       * Sets the file path formatter for the destination files.
@@ -146,10 +156,11 @@ object HadoopFileStorage {
         _stagingBasePath,
         stagingFormatter,
         _destinationBasePath,
-        _destinationFilePathFormatter
+        _destinationFilePathFormatter,
+        _offsetCompression
       )
     }
   }
 
-  def builder[P](): Builder[P] = Builder[P](null, null, null, null, null)
+  def builder[P](): Builder[P] = Builder[P](null, null, null, null, null, null)
 }

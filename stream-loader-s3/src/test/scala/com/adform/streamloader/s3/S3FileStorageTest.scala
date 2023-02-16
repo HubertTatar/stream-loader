@@ -11,7 +11,7 @@ package com.adform.streamloader.s3
 import java.io.File
 import java.util.UUID
 import com.adform.streamloader.model.{StreamPosition, StreamRange, Timestamp}
-import com.adform.streamloader.sink.batch.storage.TwoPhaseCommitMetadata
+import com.adform.streamloader.sink.batch.storage.{TwoPhaseCommitMetadata, Without, Zstd}
 import com.adform.streamloader.sink.file.{FilePathFormatter, PartitionedFileRecordBatch, SingleFileRecordBatch}
 import com.adform.streamloader.source.MockKafkaContext
 import org.apache.kafka.clients.consumer.OffsetAndMetadata
@@ -40,6 +40,7 @@ class S3FileStorageTest extends AnyFunSpec with Matchers with MockS3 {
       .s3Client(s3Client)
       .bucket(bucket)
       .filePathFormatter(formatter)
+      .offsetCompression(Without)
       .build()
 
     val tp = new TopicPartition("topic", 0)

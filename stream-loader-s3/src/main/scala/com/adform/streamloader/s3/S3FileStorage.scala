@@ -8,7 +8,7 @@
 
 package com.adform.streamloader.s3
 
-import com.adform.streamloader.sink.batch.storage.TwoPhaseCommitBatchStorage
+import com.adform.streamloader.sink.batch.storage.{OffsetCompression, TwoPhaseCommitBatchStorage}
 import com.adform.streamloader.sink.file.{FilePathFormatter, FileRecordBatch, PartitionedFileRecordBatch}
 import com.adform.streamloader.util.Logging
 import software.amazon.awssdk.core.sync.RequestBody
@@ -24,8 +24,11 @@ import scala.jdk.CollectionConverters._
 class S3FileStorage[P](
     s3Client: S3Client,
     bucket: String,
-    filePathFormatter: FilePathFormatter[P]
-) extends TwoPhaseCommitBatchStorage[PartitionedFileRecordBatch[P, FileRecordBatch], S3MultiFileStaging]
+    filePathFormatter: FilePathFormatter[P],
+    offsetCompression: OffsetCompression
+) extends TwoPhaseCommitBatchStorage[PartitionedFileRecordBatch[P, FileRecordBatch], S3MultiFileStaging](
+      offsetCompression
+    )
     with Logging {
 
   override protected def stageBatch(batch: PartitionedFileRecordBatch[P, FileRecordBatch]): S3MultiFileStaging = {
@@ -114,7 +117,8 @@ object S3FileStorage {
   case class Builder[P](
       private val _s3Client: S3Client,
       private val _bucket: String,
-      private val _filePathFormatter: FilePathFormatter[P]
+      private val _filePathFormatter: FilePathFormatter[P],
+      private val _offsetCompression: OffsetCompression
   ) {
 
     /**
@@ -132,14 +136,20 @@ object S3FileStorage {
       */
     def filePathFormatter(formatter: FilePathFormatter[P]): Builder[P] = copy(_filePathFormatter = formatter)
 
+    /**
+      * Sets the offset compression strategy
+      */
+    def offsetCompression(offsetCompression: OffsetCompression): Builder[P] =
+      copy(_offsetCompression = offsetCompression)
+
     def build(): S3FileStorage[P] = {
       if (_s3Client == null) throw new IllegalArgumentException("Must provide an S3 client")
       if (_bucket == null) throw new IllegalArgumentException("Must provide a valid bucket")
       if (_filePathFormatter == null) throw new IllegalArgumentException("Must provide a file path formatter")
 
-      new S3FileStorage(_s3Client, _bucket, _filePathFormatter)
+      new S3FileStorage(_s3Client, _bucket, _filePathFormatter, _offsetCompression)
     }
   }
 
-  def builder[P](): Builder[P] = Builder[P](null, null, null)
+  def builder[P](): Builder[P] = Builder[P](null, null, null, null)
 }

@@ -26,7 +26,7 @@ import scala.collection.concurrent.TrieMap
   *   1. stage the batch to storage (e.g. upload file to a temporary path),
   *   1. stage offsets to Kafka by performing an offset commit without modifying the actual offset, instead
   *      saving the new offset and the staged batch information (e.g. file path of the temporary uploaded file)
-  *      serialized as compressed and base64 encoded JSON to the offset commit metadata field,
+  *      serialized as raw JSON or compressed and base64 encoded JSON to the offset commit metadata field,
   *   1. store the staged batch (e.g. move the temporary file to the final destination)
   *   1. commit new offsets to Kafka and clear the staging information from the offset metadata.
   *
@@ -38,7 +38,7 @@ import scala.collection.concurrent.TrieMap
   * @tparam B Type of record batches.
   * @tparam S Type of the batch staging information, must be JSON serializable.
   */
-abstract class TwoPhaseCommitBatchStorage[-B <: RecordBatch, S: JsonSerializer]
+abstract class TwoPhaseCommitBatchStorage[-B <: RecordBatch, S: JsonSerializer](offsetCompression: OffsetCompression)
     extends RecordBatchStorage[B]
     with Logging
     with Metrics {
@@ -87,7 +87,11 @@ abstract class TwoPhaseCommitBatchStorage[-B <: RecordBatch, S: JsonSerializer]
 
     log.info(s"Recovery for $tp succeeded, committing offsets to ${stagedOffsetCommit.end.offset + 1}")
     val metadata = TwoPhaseCommitMetadata(stagedOffsetCommit.end.watermark, None)
-    new OffsetAndMetadata(stagedOffsetCommit.end.offset + 1, metadata.serialize)
+    val md = offsetCompression match {
+      case Without => metadata.toJson
+      case Zstd => metadata.serialize
+    }
+    new OffsetAndMetadata(stagedOffsetCommit.end.offset + 1, md)
   }
 
   /**
@@ -97,7 +101,7 @@ abstract class TwoPhaseCommitBatchStorage[-B <: RecordBatch, S: JsonSerializer]
     val staging = stageBatch(batch)
     stageKafkaCommit(batch, staging)
     storeBatch(staging)
-    finalizeKafkaCommit(batch, staging)
+    finalizeKafkaCommit(batch)
   }
 
   /**
@@ -129,18 +133,24 @@ abstract class TwoPhaseCommitBatchStorage[-B <: RecordBatch, S: JsonSerializer]
         recordRange.start.watermark,
         Some(StagedOffsetCommit(staging, recordRange.start, recordRange.end))
       )
-      val serializedMetadata = metadata.serialize
-      Metrics.metadataSize(tp).record(serializedMetadata.length)
+      val md = offsetCompression match {
+        case Without => metadata.toJson
+        case Zstd => metadata.serialize
+      }
+      Metrics.metadataSize(tp).record(md.length)
 
-      tp -> new OffsetAndMetadata(recordRange.start.offset, serializedMetadata)
+      tp -> new OffsetAndMetadata(recordRange.start.offset, md)
     })
     kafkaContext.commitSync(offsets.toMap)
   }
 
-  private def finalizeKafkaCommit(batch: B, staging: S): Unit = {
+  private def finalizeKafkaCommit(batch: B): Unit = {
     val offsets = batch.recordRanges.map(recordRange => {
       val tp = recordRange.topicPartition
-      val metadata = TwoPhaseCommitMetadata(recordRange.end.watermark, None).serialize
+      val metadata = offsetCompression match {
+        case Without => TwoPhaseCommitMetadata(recordRange.end.watermark, None).toJson
+        case Zstd => TwoPhaseCommitMetadata(recordRange.end.watermark, None).serialize
+      }
       tp -> new OffsetAndMetadata(recordRange.end.offset + 1, metadata)
     })
     kafkaContext.commitSync(offsets.toMap)
@@ -149,13 +159,14 @@ abstract class TwoPhaseCommitBatchStorage[-B <: RecordBatch, S: JsonSerializer]
   private object Metrics {
     private val metadataSizes = TrieMap.empty[TopicPartition, DistributionSummary]
 
-    private def topicTags(tp: TopicPartition) = Seq(MetricTag("topic", tp.topic()))
+    private def partitionTags(tp: TopicPartition) =
+      Seq(MetricTag("topic", tp.topic()), MetricTag("partition", tp.partition().toString))
 
     def metadataSize(tp: TopicPartition): DistributionSummary = metadataSizes.getOrElseUpdate(
       tp,
       createDistribution(
         "kafka.commit.staged.metadata.size.bytes",
-        Seq(MetricTag("loader-thread", Thread.currentThread().getName)) ++ topicTags(tp)
+        Seq(MetricTag("loader-thread", Thread.currentThread().getName)) ++ partitionTags(tp)
       )
     )
   }

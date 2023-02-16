@@ -12,6 +12,7 @@ import com.adform.streamloader.hadoop.HadoopFileStorage
 import com.adform.streamloader.hadoop.parquet.DerivedAvroParquetFileBuilder
 import com.adform.streamloader.model.{ExampleMessage, StreamRecord, Timestamp}
 import com.adform.streamloader.sink.batch.RecordBatchingSink
+import com.adform.streamloader.sink.batch.storage.{Without, Zstd}
 import com.adform.streamloader.sink.file.FileCommitStrategy.ReachedAnyOf
 import com.adform.streamloader.sink.file._
 import com.adform.streamloader.source.KafkaSource
@@ -78,6 +79,7 @@ object TestParquetHdfsLoader extends Loader {
               None
             )
           )
+          .offsetCompression(Zstd)
           .build()
       )
       .build()

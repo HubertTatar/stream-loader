@@ -9,7 +9,7 @@
 package com.adform.streamloader.hadoop
 
 import com.adform.streamloader.model.{StreamPosition, StreamRange, Timestamp}
-import com.adform.streamloader.sink.batch.storage.TwoPhaseCommitMetadata
+import com.adform.streamloader.sink.batch.storage.{TwoPhaseCommitMetadata, Without, Zstd}
 import com.adform.streamloader.sink.file.{FilePathFormatter, PartitionedFileRecordBatch, SingleFileRecordBatch}
 import com.adform.streamloader.source.MockKafkaContext
 import org.apache.hadoop.conf.Configuration
@@ -47,6 +47,7 @@ class HadoopFileStorageTest extends AnyFunSpec with Matchers {
       .stagingBasePath(s"$baseDir/staged")
       .destinationBasePath(s"$baseDir/stored")
       .destinationFilePathFormatter(formatter)
+      .offsetCompression(Without)
       .build()
 
     val tp = new TopicPartition("topic", 0)

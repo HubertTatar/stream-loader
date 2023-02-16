@@ -10,6 +10,7 @@ package com.adform.streamloader.loaders
 
 import com.adform.streamloader.model.Timestamp
 import com.adform.streamloader.s3.S3FileStorage
+import com.adform.streamloader.sink.batch.storage.{Without, Zstd}
 import com.adform.streamloader.sink.batch.{RecordBatchingSink, RecordFormatter}
 import com.adform.streamloader.sink.encoding.csv.CsvFileBuilder
 import com.adform.streamloader.sink.file.FileCommitStrategy.ReachedAnyOf
@@ -87,6 +88,7 @@ class BaseS3Loader extends Loader {
             .filePathFormatter(
               new TimePartitioningFilePathFormatter[LocalDate](cfg.getStringOpt("file.time-partition.pattern"), None)
             )
+            .offsetCompression(Zstd)
             .build()
         )
         .partitionGrouping(groupForPartition)

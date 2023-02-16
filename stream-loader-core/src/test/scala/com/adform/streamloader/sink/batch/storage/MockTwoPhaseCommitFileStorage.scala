@@ -12,7 +12,7 @@ import com.adform.streamloader.sink.file.SingleFileRecordBatch
 
 import scala.collection.mutable
 
-class MockTwoPhaseCommitFileStorage extends TwoPhaseCommitBatchStorage[SingleFileRecordBatch, FileStaging] {
+class MockTwoPhaseCommitFileStorage extends TwoPhaseCommitBatchStorage[SingleFileRecordBatch, FileStaging](Zstd) {
 
   val stagedFiles = mutable.Set.empty[String]
   val storedFiles = mutable.Set.empty[String]
